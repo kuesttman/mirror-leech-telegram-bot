@@ -2,6 +2,7 @@ from httpx import AsyncClient
 from asyncio.subprocess import PIPE
 from functools import partial, wraps
 from concurrent.futures import ThreadPoolExecutor
+from urllib.parse import urlsplit, urlunsplit
 from asyncio import (
     create_subprocess_exec,
     create_subprocess_shell,
@@ -56,17 +57,34 @@ def create_help_buttons():
     _build_command_usage(CLONE_HELP_DICT, "clone")
 
 
+def _web_selection_base_url(config=Config):
+    base_url = str(config.BASE_URL).strip().rstrip("/")
+    if not base_url:
+        return ""
+
+    if "://" not in base_url:
+        base_url = f"http://{base_url}"
+
+    parsed = urlsplit(base_url)
+    port = int(getattr(config, "BASE_URL_PORT", 80) or 80)
+    netloc = parsed.netloc
+
+    if parsed.port is None and port not in (0, 80):
+        netloc = f"{netloc}:{port}"
+
+    return urlunsplit((parsed.scheme or "http", netloc, parsed.path, "", ""))
+
+
 def bt_selection_buttons(id_):
     gid = id_[:12] if len(id_) > 25 else id_
     pin = "".join([n for n in id_ if n.isdigit()][:4])
     buttons = ButtonMaker()
+    base_url = _web_selection_base_url()
     if Config.WEB_PINCODE:
-        buttons.url_button("Select Files", f"{Config.BASE_URL}/app/files?gid={id_}")
+        buttons.url_button("Select Files", f"{base_url}/app/files?gid={id_}")
         buttons.data_button("Pincode", f"sel pin {gid} {pin}")
     else:
-        buttons.url_button(
-            "Select Files", f"{Config.BASE_URL}/app/files?gid={id_}&pin={pin}"
-        )
+        buttons.url_button("Select Files", f"{base_url}/app/files?gid={id_}&pin={pin}")
     buttons.data_button("Done Selecting", f"sel done {gid} {id_}")
     buttons.data_button("Cancel", f"sel cancel {gid}")
     return buttons.build_menu(2)
